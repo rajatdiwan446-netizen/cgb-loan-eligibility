@@ -235,7 +235,10 @@ footer{max-width:1240px;margin:0 auto;padding:4px 20px 30px;color:var(--muted);f
         </div>
       </div>
       <label data-for="htul,lap"><span id="valLbl">Property market value (₹)</span> <input type="text" inputmode="decimal" autocomplete="off" data-v="money" id="lapVal" value="0"><small id="valHelp"></small></label>
-      <label data-for="htul">Present CGB housing loan outstanding (₹) <input type="text" inputmode="decimal" autocomplete="off" data-v="money" id="hlOut" value="0"></label>
+      <div class="row" data-for="htul">
+        <label>Present CGB housing loan outstanding (₹) <input type="text" inputmode="decimal" autocomplete="off" data-v="money" id="hlOut" value="0"></label>
+        <label>Remaining tenure of housing loan (months) <input type="text" inputmode="numeric" autocomplete="off" data-v="hlrem" id="hlRem" value="" placeholder="e.g. 210"><small>Top-up tenure = 180 months or this, whichever is more</small></label>
+      </div>
       <label data-for="lap">Property location
         <select id="area"><option value="mun">Nagar Palika / Nagar Nigam (max ₹250 L)</option><option value="np">Nagar Panchayat (max ₹50 L)</option></select>
       </label>
@@ -566,6 +569,13 @@ function checkOne(el){
     const v = +raw; if (v < 1000 || v > 100000) return 'Rate looks wrong — enter ₹ per gram (1,000–1,00,000)';
     return '';
   }
+  if (r === 'hlrem'){
+    if (raw === '') return '';
+    if (raw.startsWith('-')) return 'Negative values are not allowed';
+    if (!/^\d+$/.test(raw)) return 'Whole months only';
+    if (+raw > 360) return 'Housing loan tenure cannot exceed 360 months';
+    return '';
+  }
   if (r === 'gemi'){
     if (raw === '') return 'Enter EMI months';
     if (!/^\d+$/.test(raw)) return 'Whole months only';
@@ -734,13 +744,15 @@ function _calc(){
     const rate = rateHTUL(cibil, ntc);
     pass(rate != null, `CIBIL ${cibil} (min 700)`, 'CIBIL score of 700 or more is compulsory');
     const lim = pensionable || emp==='self' ? 70 : Math.min(70, retAge);
-    const t = Math.min(180, tl(lim));
-    pass(t >= 12, `Tenure ${t} months (max 15 yrs, by ${lim===70?'age 70':'retirement'})`, 'Not enough time left before retirement / age 70');
+    const hlRem = Math.floor(num('hlRem')), baseT = Math.max(180, hlRem), ageT = tl(lim);
+    const t = Math.min(baseT, ageT);
+    pass(t >= 12, `Tenure ${t} months — higher of 180 months and remaining HL term${hlRem ? ` (${hlRem} months)` : ''} = ${baseT}, ${t < baseT ? `limited by ${lim===70?'age 70':'retirement'}` : `within ${lim===70?'age 70':'retirement'}`}`, 'Not enough time left before retirement / age 70');
+    if (!hlRem) note('Enter remaining tenure of the housing loan — if it is more than 180 months, the top-up can run for that period');
     note('Existing housing loan EMI must be included in "Existing EMIs"');
     let ltv = null;
     if (val > 0) ltv = Math.max(0, 0.75*val - out); else note('Enter property market value and HL outstanding to apply 75% LTV');
     const ratio = slab(nai, [[5*L,0.55],[10*L,0.60],[Infinity,0.70]]);
-    o = {name:'Home Top-Up Loan (HTUL)', sub:'Term loan / OD on existing CGB home loan', src:'HTUL Master Circular CGB/2026-27/37 dt 01-04-2026', rate, tenure:t, ratio, nmi, caps:[['75% of market value − HL outstanding', ltv]], min:0.5*L, max:100*L};
+    o = {name:'Home Top-Up Loan (HTUL)', sub:'Term loan / OD on existing CGB home loan', src:'HTUL Master Circular CGB/2026-27/37 dt 01-04-2026 · tenure: 180 months or remaining HL term, whichever is more', rate, tenure:t, ratio, nmi, caps:[['75% of market value − HL outstanding', ltv]], min:0.5*L, max:100*L};
   }
 
   if (sel==='lap'){
@@ -943,6 +955,7 @@ function _calc(){
   if (sel==='hl' && mor) asset.push(['Moratorium period', null, `${mor} months — interest ${morServ ? 'paid monthly' : 'capitalised'}`]);
   if ((sel==='htul'||sel==='lap') && num('lapVal')) asset.push([sel==='htul'?'Present market value of property':'Realizable value of property', num('lapVal')]);
   if (sel==='htul' && num('hlOut')) asset.push(['Present housing loan outstanding', num('hlOut')]);
+  if (sel==='htul' && num('hlRem')) asset.push(['Remaining tenure of housing loan', null, num('hlRem') + ' months']);
   if (sel==='realty' && num('plotVal')) asset.push(['Plot value / agreement price', num('plotVal')]);
   if (sel==='car' && num('carVal')) asset.push(['On-road price of car', num('carVal')]);
   if (sel==='tw' && num('twVal')) asset.push(['On-road price of two-wheeler', num('twVal')]);
